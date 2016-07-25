@@ -19,13 +19,33 @@ class SessionDataTask: NSURLSessionDataTask {
         return interaction?.response
     }
 
+    // MARK: - Overridden Properties
+
+    let _taskIdentifier: Int
+    override var taskIdentifier: Int {
+        return _taskIdentifier
+    }
+
+    override var originalRequest: NSURLRequest? {
+        return request
+    }
+
+    override var currentRequest: NSURLRequest? {
+        return request
+    }
+
+    var _state: NSURLSessionTaskState = .Suspended
+    override var state: NSURLSessionTaskState {
+        return _state
+    }
 
     // MARK: - Initializers
 
-    init(session: Session, request: NSURLRequest, completion: (Completion)? = nil) {
+    init(taskIdentifier: Int, session: Session, request: NSURLRequest, completion: (Completion)? = nil) {
         self.session = session
         self.request = request
         self.completion = completion
+        _taskIdentifier = taskIdentifier
     }
 
 
@@ -36,17 +56,38 @@ class SessionDataTask: NSURLSessionDataTask {
     }
 
     override func resume() {
+        _state = .Running
+
         let cassette = session.cassette
 
         // Find interaction
-        if let interaction = session.cassette?.interactionForRequest(request) {
+        if let interaction = cassette?.interactionForRequest(request) {
             self.interaction = interaction
+
+            if let delegate = session.delegate as? NSURLSessionDataDelegate {
+
+                // Delegate message #1
+                delegate.URLSession?(session, dataTask: self, didReceiveResponse: interaction.response, completionHandler: { (disposition) -> Void in
+                    // TODO
+                })
+
+                // Delegate message #2
+                if let responseData = interaction.responseData {
+                    delegate.URLSession?(session, dataTask: self, didReceiveData: responseData)
+                }
+
+                // Delegate message #3
+                delegate.URLSession?(session, task: self, didCompleteWithError: nil)
+            }
+
             // Forward completion
             if let completion = completion {
                 dispatch_async(queue) {
                     completion(interaction.responseData, interaction.response, nil)
                 }
             }
+
+            _state = .Completed
             session.finishTask(self, interaction: interaction, playback: true)
             return
         }
@@ -78,6 +119,7 @@ class SessionDataTask: NSURLSessionDataTask {
             // Still call the completion block so the user can chain requests while recording.
             dispatch_async(this.queue) {
                 this.completion?(data, response, nil)
+                self?._state = .Completed
             }
 
             // Create interaction

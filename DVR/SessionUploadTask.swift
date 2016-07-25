@@ -13,11 +13,11 @@ class SessionUploadTask: NSURLSessionUploadTask {
 
     // MARK: - Initializers
 
-    init(session: Session, request: NSURLRequest, completion: Completion? = nil) {
+    init(taskIdentifier: Int, session: Session, request: NSURLRequest, completion: Completion? = nil) {
         self.session = session
         self.request = request
         self.completion = completion
-        dataTask = SessionDataTask(session: session, request: request, completion: completion)
+        dataTask = SessionDataTask(taskIdentifier: taskIdentifier, session: session, request: request, completion: completion)
     }
 
     // MARK: - NSURLSessionTask

@@ -17,13 +17,16 @@ public class Session: NSURLSession {
     private var completedInteractions = [Interaction]()
     private var completionBlock: (Void -> Void)?
 
+    private static var nextTaskID: Int = 0
+    private let idGenerationQueue = dispatch_queue_create("com.venmo.DVR.idGenerationQueue", nil)
+
     override public var delegate: NSURLSessionDelegate? {
         return backingSession.delegate
     }
 
     // MARK: - Initializers
 
-    public init(outputDirectory: String = "~/Desktop/DVR/", cassetteName: String, testBundle: NSBundle = NSBundle.allBundles().filter() { $0.bundlePath.hasSuffix(".xctest") }.first!, backingSession: NSURLSession = NSURLSession.sharedSession()) {
+    public init(outputDirectory: String = "~/Desktop/DVR/", cassetteName: String, testBundle: NSBundle = NSBundle.allBundles().filter() { $0.bundlePath.hasSuffix(".xctest") }.first!, backingSession: NSURLSession = NSURLSession.sharedSession(), delegate: NSURLSessionDelegate? = nil) {
         self.outputDirectory = outputDirectory
         self.cassetteName = cassetteName
         self.testBundle = testBundle
@@ -144,16 +147,25 @@ public class Session: NSURLSession {
 
     // MARK: - Private
 
+    private func generateNextTaskID() -> Int {
+        var id: Int!
+        dispatch_sync(idGenerationQueue) {
+            id = Session.nextTaskID
+            Session.nextTaskID += 1
+        }
+        return id
+    }
+
     private func addDataTask(request: NSURLRequest, completionHandler: ((NSData?, NSURLResponse?, NSError?) -> Void)? = nil) -> NSURLSessionDataTask {
         let modifiedRequest = backingSession.configuration.HTTPAdditionalHeaders.map(request.requestByAppendingHeaders) ?? request
-        let task = SessionDataTask(session: self, request: modifiedRequest, completion: completionHandler)
+        let task = SessionDataTask(taskIdentifier: generateNextTaskID(), session: self, request: modifiedRequest, completion: completionHandler)
         addTask(task)
         return task
     }
 
     private func addDownloadTask(request: NSURLRequest, completionHandler: SessionDownloadTask.Completion? = nil) -> NSURLSessionDownloadTask {
         let modifiedRequest = backingSession.configuration.HTTPAdditionalHeaders.map(request.requestByAppendingHeaders) ?? request
-        let task = SessionDownloadTask(session: self, request: modifiedRequest, completion: completionHandler)
+        let task = SessionDownloadTask(taskIdentifier: generateNextTaskID(), session: self, request: modifiedRequest, completion: completionHandler)
         addTask(task)
         return task
     }
@@ -161,7 +173,7 @@ public class Session: NSURLSession {
     private func addUploadTask(request: NSURLRequest, fromData data: NSData?, completionHandler: SessionUploadTask.Completion? = nil) -> NSURLSessionUploadTask {
         var modifiedRequest = backingSession.configuration.HTTPAdditionalHeaders.map(request.requestByAppendingHeaders) ?? request
         modifiedRequest = data.map(modifiedRequest.requestWithBody) ?? modifiedRequest
-        let task = SessionUploadTask(session: self, request: modifiedRequest, completion: completionHandler)
+        let task = SessionUploadTask(taskIdentifier: generateNextTaskID(), session: self, request: modifiedRequest, completion: completionHandler)
         addTask(task.dataTask)
         return task
     }
